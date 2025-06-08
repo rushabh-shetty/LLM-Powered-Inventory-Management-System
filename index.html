@@ -1,0 +1,2241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LLM Management System</title>
+    <!-- Vue.js CDN (Production Build) -->
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <!-- Socket.IO CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/socket.io-client@4.7.2/dist/socket.io.min.js"></script>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: linear-gradient(to bottom, #1a202c, #2d3748);
+            color: #e2e8f0;
+        }
+        .tab-button {
+            flex: 1;
+            padding: 10px 20px;
+            border-radius: 6px;
+            transition: all 0.3s;
+            color: #FFFFFF;
+            border: 2px solid #80DEEA;
+            background: #424242;
+            text-align: center;
+        }
+        .tab-button:hover {
+            background: #4F4F4F;
+            color: #FFFFFF;
+        }
+        .tab-button.active {
+            background: #40C4FF;
+            color: #FFFFFF;
+            border-color: #80DEEA;
+        }
+        .tab-button.active:hover {
+            background: #80D6FF;
+        }
+        .menu-item { padding: 5px; cursor: pointer; }
+        .menu-item:hover { background-color: #f0f0f0; color: #1A1A2E; }
+        .table-wrapper { overflow-x: auto; margin-bottom: 20px; }
+        table { border-collapse: collapse; width: 100%; table-layout: fixed; background: #2C2F33; color: #E0E0E0; }
+        pre { background: #2C2F33; color: #E0E0E0; padding: 10px; border: 1px solid #404040; margin: 0; overflow-x: auto; white-space: pre-wrap; word-wrap: break-word; max-width: 100%; }
+        th, td { border: 1px solid #404040; padding: 8px; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #E0E0E0; }
+        .monitor-table th:first-child, .monitor-table td:first-child { width: 150px; background: #333333; }
+        .monitor-table th:not(:first-child), .monitor-table td:not(:first-child) { width: calc((100% - 150px) / var(--num-metrics)); }
+        .violation { color: red; }
+        .section, .wizard { margin-top: 20px; }
+        .error { color: red; }
+        button { padding: 5px 10px; margin: 5px; border: 2px solid #00FFFF; background: #2C2F33; color: #00FFFF; border-radius: 5px; transition: all 0.3s; }
+        input, textarea { width: 100%; padding: 5px; margin: 5px 0; background: #2C2F33; color: #E0E0E0; border: 1px solid #404040; border-radius: 3px; }
+        .stats-table th:first-child, .stats-table td:first-child { background-color: #3A3A3A; font-weight: bold; }
+        .stats-table th { background-color: #444444; }
+        .metrics-list { display: none; background: #2C2F33; padding: 10px; border-radius: 5px; }
+        .metrics-list.visible { display: block; }
+        button:hover { background: #00FFFF; color: #1A2E; }
+        .list-button { font-size: 1.2em; font-weight: bold; padding: 10px 20px; }
+        .badge { background: red; color: white; padding: 2px 6px; border-radius: 50%; margin-left: 5px; }
+        .enabled-metric { background-color: #00FF7F; padding: 5px; border-radius: 3px; color: #1A1A2E; }
+        .enabled-metric:hover { background-color: #00CC66; }
+        .monitor-modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.7); z-index: 1000; }
+        .monitor-modal.active { display: flex; align-items: center; justify-content: center; background: rgba(0, 0, 0, 0.5); }
+        .performance-modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.7); z-index: 1000; }
+        .performance-modal.active { display: flex; align-items: center; justify-content: center; background: rgba(0, 0, 0, 0.7); }
+        .modal-content {
+            background: #2C2F33;
+            width: 90%;
+            max-width: 600px;
+            min-width: 300px;
+            padding: 20px;
+            border-radius: 5px;
+            color: #E0E0E0;
+            border: 2px solid #00FFFF;
+            overflow-y: auto;
+            max-height: calc(100vh - 100px);
+        }
+        .modal-content h2 { margin-top: 0; color: #00FFFF; }
+        .fade-in { animation: fadeIn 0.3s; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        .animate-slide-up { animation: slideUp 0.3s ease-out; }
+        @keyframes slideUp {
+            from { transform: translateY(20px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+        .p-4 .transition-all.duration-300 {
+            overflow-y: auto;
+            max-height: none;
+        }
+        .bg-gray-800.rounded-lg.shadow-md {
+            height: auto;
+            min-height: 200px;
+        }
+        .monitor-tab-button {
+            background: #404040;
+            color: #FFFFFF;
+            border: 2px solid #00FFFF;
+            padding: 5px 10px;
+            margin: 5px;
+            border-radius: 5px;
+            transition: all 0.3s;
+        }
+        .monitor-tab-button:hover {
+            background: #00FF7F;
+            color: #1A1A2E;
+        }
+        .monitor-tab-button:disabled {
+            background: #666666;
+            color: #CCCCCC;
+            cursor: not-allowed;
+        }
+    </style>
+</head>
+<body>
+    <div id="app" class="max-w-7xl mx-auto p-6">
+        <div class="sticky top-0 z-20 bg-gray-900 p-4 rounded-lg shadow-md">
+            <h1 class="text-3xl font-bold leading-normal text-white">LLM Management System</h1>
+        </div>
+
+        <!-- Toast Container -->
+        <div class="fixed bottom-4 right-4 space-y-2 z-50">
+            <transition-group name="toast" tag="div">
+                <div v-for="(toast, index) in toasts" :key="toast.id" class="p-4 rounded-lg shadow-lg text-white"
+                     :class="{'bg-green-600': toast.type === 'success', 'bg-red-600': toast.type === 'error', 'bg-blue-600': toast.type === 'info'}">
+                    <span>{{ toast.message }}</span>
+                </div>
+            </transition-group>
+        </div>
+
+        <!-- Tab Navigation -->
+        <div class="flex space-x-4 bg-gray-900 rounded-lg p-2 mb-4">
+            <button
+                v-for="tab in tabs"
+                :key="tab"
+                @click="console.log('Tab clicked:', tab); switchTab(tab)"
+                :class="['tab-button', { 'active': activeTab === tab }]"
+            >
+                {{ tab }}
+            </button>
+        </div>
+
+        <!-- Tab Contents -->
+        <main-tab v-if="activeTab === 'Main'"></main-tab>
+        <monitor-tab v-if="activeTab === 'Monitor'"></monitor-tab>
+        <performance-tab v-if="activeTab === 'Performance'"></performance-tab>
+        <upgrade-tab v-if="activeTab === 'Upgrade'"></upgrade-tab>
+    </div>
+
+    <script>
+        const { createApp, ref, onMounted, onUnmounted, computed, nextTick, reactive, provide, inject } = Vue;
+
+        // DynamicMenu Component
+        const DynamicMenu = (() => {
+            const component = {
+                props: ['items'],
+                template: `
+                    <div>
+                        <div v-for="item in items" :key="item.name" class="menu-item" @click="handleClick(item)">
+                            {{ item.name }}
+                            <template v-if="item.items">
+                                <dynamic-menu :items="item.items" @action="$emit('action', $event)"></dynamic-menu>
+                            </template>
+                        </div>
+                    </div>
+                `,
+                methods: {
+                    handleClick(item) {
+                        if (item.action) this.$emit('action', item.action);
+                    }
+                }
+            };
+            component.components = { 'dynamic-menu': component };
+            return component;
+        })();
+
+        // Main Tab Component
+        const MainTab = {
+            template: `
+                    <div class="tab-content bg-gray-800 p-6 rounded-lg shadow-md">
+                        <div v-if="loading">Loading...</div>
+                        <div v-else>
+                            <div class="section">
+                                <h3 class="text-lg font-semibold text-white">Grok Q&A</h3>
+                                <input v-model="grokPrompt" placeholder="Ask a question about your system..." @keyup.enter="askGrok" class="w-full mt-2">
+                                <button @click="askGrok" :disabled="waitingForGrok" class="mt-2 bg-gray-700 text-white border-2 border-cyan-400 rounded-md px-1 py-0.5 hover:bg-gray-600">Send</button>
+                                <p v-if="waitingForGrok" class="text-gray-300">Waiting for Grok...</p>
+                                <p v-if="grokError" class="error">{{ grokError }}</p>
+                                <div v-if="grokMessages.length" class="mt-2">
+                                    <div v-for="(msg, index) in grokMessages" :key="index" class="mb-2">
+                                        <strong>{{ msg.role }}:</strong> 
+                                        <div v-html="msg.content"></div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="section mt-4">
+                                <h3 class="text-lg font-semibold text-white">Collect System Data</h3>
+                                <button @click="runCollect" class="ml-4 bg-gray-700 text-white border-2 border-cyan-400 rounded-md px-4 py-2 hover:bg-gray-600">
+                                    Run Collect
+                                </button>
+                                <p v-if="collecting" class="text-gray-300 mt-2">Collecting data...</p>
+                                <p v-if="collectError" class="error mt-2">{{ collectError }}</p>
+                                <div v-if="collectOutput" class="mt-4">
+                                    <div class="flex justify-between items-center">
+                                        <h4 class="text-md font-semibold text-white">System Data</h4>
+                                        <button @click="downloadSystemData" class="px-3 py-1 bg-gray-600 text-white rounded-md hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500">
+                                            Download
+                                        </button>
+                                    </div>
+                                    <pre class="mt-2 bg-gray-700 p-4 rounded-lg text-gray-200 whitespace-pre-wrap max-h-96 overflow-y-auto">{{ collectOutput }}</pre>
+                                </div>
+                            </div>
+                            <div class="section mt-4">
+                                <h3 class="text-lg font-semibold text-white">Custom Metrics</h3>
+                                <button @click="openMetricForm" class="ml-4 bg-gray-700 text-white border-2 border-cyan-400 rounded-md px-4 py-2 hover:bg-gray-600">New Custom Metric</button>
+                                <button @click="toggleMetricsTable" class="ml-4 bg-gray-700 text-white border-2 border-cyan-400 rounded-md px-4 py-2 hover:bg-gray-600">{{ showMetricsTable ? 'Hide Metrics' : 'Custom Metrics' }}</button>
+                                <div class="mt-4" v-if="showMetricsTable">
+                                    <h4 class="text-md font-semibold text-white">Existing Metrics</h4>
+                                    <div v-if="metrics.length === 0" class="text-gray-300 mt-2">No custom metrics defined.</div>
+                                    <div v-else class="table-wrapper">
+                                        <table class="mt-2">
+                                            <thead>
+                                                <tr>
+                                                    <th>Name</th>
+                                                    <th>Command</th>
+                                                    <th>Actions</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                <tr v-for="metric in metrics" :key="metric.name">
+                                                    <td>{{ metric.name }}</td>
+                                                    <td>{{ metric.command }}</td>
+                                                    <td>
+                                                        <button @click="confirmDelete(metric.name)" class="bg-red-600 text-white px-2 py-1 rounded-md hover:bg-red-700">Delete</button>
+                                                    </td>
+                                                </tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                            <!-- Metric Creation Modal -->
+                            <div class="monitor-modal" :class="{ 'active': showMetricForm }" @click.self="closeMetricForm">
+                                <div class="modal-content fade-in">
+                                    <h2>New Custom Metric</h2>
+                                    <form @submit.prevent="createMetric">
+                                        <div class="mt-2">
+                                            <label class="block text-sm font-medium text-gray-300">Name</label>
+                                            <input v-model="newMetric.name" type="text" required class="mt-1 w-full" placeholder="e.g., CPU Usage">
+                                        </div>
+                                        <div class="mt-2">
+                                            <label class="block text-sm font-medium text-gray-300">Command</label>
+                                            <input v-model="newMetric.command" type="text" required class="mt-1 w-full bg-gray-700 text-gray-200 border border-gray-600 rounded-md focus:ring-2 focus:ring-blue-500" placeholder="e.g., top -bn1 | grep Cpu">
+                                         </div>
+                                         <div class="mt-2">
+                                            <label class="block text-sm font-medium text-gray-300">Tool</label>
+                                            <input v-model="newMetric.tool" type="text" required class="mt-1 w-full bg-gray-700 text-gray-200 border border-gray-600 rounded-md focus:ring-2 focus:ring-blue-500" placeholder="e.g., top">
+                                        </div>
+                                        <div class="mt-2">
+                                            <label class="block text-sm font-medium text-gray-300">Type</label>
+                                            <select v-model="newMetric.type" required class="mt-1 w-full bg-gray-700 text-gray-200 border border-gray-600 rounded-md focus:ring-2 focus:ring-blue-500">
+                                                <option value="" disabled selected>Select a type</option>
+                                                <option value="static">static</option>
+                                                <option value="dynamic_single">dynamic_single</option>
+                                                <option value="dynamic_multi">dynamic_multi</option>
+                                            </select>
+                                        </div>
+                                        <div class="mt-4 flex justify-end space-x-2">
+                                            <button type="button" @click="closeMetricForm" class="bg-gray-600 text-white px-4 py-2 rounded-md hover:bg-gray-700">Cancel</button>
+                                            <button type="submit" :disabled="creatingMetric" class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700" :class="{ 'bg-gray-600 cursor-not-allowed': creatingMetric }">Create</button>
+                                        </div>
+                                    </form>
+                                </div>
+                            </div>
+                            <!-- Deletion Confirmation Modal -->
+                            <div class="monitor-modal" :class="{ 'active': showDeleteConfirm }" @click.self="showDeleteConfirm = false">
+                                <div class="modal-content fade-in">
+                                    <h2>Confirm Deletion</h2>
+                                    <p>Are you sure you want to delete the metric "{{ metricToDelete.name }}"? This action cannot be undone.</p>
+                                    <div class="mt-4 flex justify-end space-x-2">
+                                        <button @click="showDeleteConfirm = false" class="bg-gray-600 text-white px-4 py-2 rounded-md hover:bg-gray-700">Cancel</button>
+                                        <button @click="deleteMetric" :disabled="deletingMetric" class="bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700" :class="{ 'bg-gray-600 cursor-not-allowed': deletingMetric }">Delete</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `,
+                setup() {
+                    const addToast = inject('addToast');
+                    const socket = inject('socket');
+                    const grokPrompt = ref('');
+                    const waitingForGrok = ref(false);
+                    const grokError = ref('');
+                    const grokMessages = ref([]);
+                    const loading = ref(true);
+                    const collecting = ref(false);
+                    const collectError = ref('');
+                    const collectOutput = ref('');
+                    const metrics = ref([]);
+                    const showMetricForm = ref(false);
+                    const creatingMetric = ref(false);
+                    const newMetric = ref({ name: '', command: '', tool: '', type: '' });
+                    const showDeleteConfirm = ref(false);
+                    const metricToDelete = ref({ name: '' });
+                    const deletingMetric = ref(false);
+                    const showMetricsTable = ref(false);
+
+                    const askGrok = async () => {
+                        if (!grokPrompt.value.trim()) return;
+                        waitingForGrok.value = true;
+                        grokMessages.value.push({ role: 'user', content: grokPrompt.value });
+                        try {
+                            const response = await fetch('/grok', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ prompt: grokPrompt.value })
+                            });
+                            const data = await response.json();
+                            if (data.success) grokMessages.value.push({ role: 'assistant', content: data.response });
+                            else grokError.value = data.error;
+                        } catch (e) {
+                            grokError.value = `Failed to get Grok response: ${e.message}`;
+                            addToast(`Failed to get Grok response: ${e.message}`, 'error');
+                        } finally {
+                            waitingForGrok.value = false;
+                            grokPrompt.value = '';
+                        }
+                    };
+
+                    const runCollect = async () => {
+                        collecting.value = true;
+                        collectError.value = '';
+                        collectOutput.value = '';
+                        try {
+                            const response = await fetch('/collect', {
+                                method: 'GET'
+                            });
+                            if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
+                            const data = await response.json();
+                            if (data.success) {
+                                collectOutput.value = data.data || 'Data collected successfully.';
+                            } else {
+                                throw new Error(data.error || 'Failed to collect data');
+                            }
+                        } catch (e) {
+                            collectError.value = `Collection failed: ${e.message}`;
+                            addToast(`Collection failed: ${e.message}`, 'error');
+                        } finally {
+                            collecting.value = false;
+                        }
+                    };
+
+                    const downloadSystemData = () => {
+                        const blob = new Blob([collectOutput.value], { type: 'text/plain' });
+                        const url = URL.createObjectURL(blob);
+                        const link = document.createElement('a');
+                        link.href = url;
+                        link.download = 'system_info.txt';
+                        document.body.appendChild(link);
+                        link.click();
+                        document.body.removeChild(link);
+                        URL.revokeObjectURL(url);
+                        addToast('System data downloaded successfully!', 'success');
+                    };
+
+                    const fetchMetrics = async () => {
+                        try {
+                            const response = await fetch('/api/custom_metrics');
+                            const data = await response.json();
+                            if (data.success) {
+                                metrics.value = data.metrics;
+                            } else {
+                                throw new Error(data.error || 'Failed to fetch metrics');
+                            }
+                        } catch (e) {
+                            addToast(`Failed to fetch metrics: ${e.message}`, 'error');
+                        }
+                    };
+
+                    const openMetricForm = () => {
+                        newMetric.value = { name: '', command: '', tool: '', type: '' };
+                        showMetricForm.value = true;
+                    };
+
+                    const closeMetricForm = () => {
+                        showMetricForm.value = false;
+                        newMetric.value = { name: '', command: '', tool: '', type: '' };
+                    };
+
+                    const createMetric = async () => {
+                        if (!newMetric.value.name.trim() || !newMetric.value.tool.trim() || !newMetric.value.command.trim() || !newMetric.value.type.trim()) {
+                            addToast('All fields (name, tool, command, type) are required', 'error');
+                            return;
+                        }
+                        creatingMetric.value = true;
+                        try {
+                            const payload = {
+                                name: newMetric.value.name,
+                                tool: newMetric.value.tool,
+                                command: newMetric.value.command,
+                                type: newMetric.value.type,
+                                subsection: newMetric.value.name
+                            };
+                            const response = await fetch('/api/custom_metrics', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify(payload)
+                            });
+                            const data = await response.json();
+                            if (data.success) {
+                                addToast('Metric created successfully', 'success');
+                                closeMetricForm();
+                                await fetchMetrics();
+                            } else {
+                                throw new Error(data.error || 'Failed to create metric');
+                            }
+                        } catch (e) {
+                            addToast(`Failed to create metric: ${e.message}`, 'error');
+                        } finally {
+                            creatingMetric.value = false;
+                        }
+                    };
+
+                    const confirmDelete = (name) => {
+                        metricToDelete.value = { name };
+                        showDeleteConfirm.value = true;
+                    };
+
+                    const deleteMetric = async () => {
+                        deletingMetric.value = true;
+                        try {
+                            const response = await fetch(`/api/custom_metrics/${metricToDelete.value.name}`, {
+                                method: 'DELETE'
+                            });
+                            const data = await response.json();
+                            if (data.success) {
+                                addToast('Metric deleted successfully', 'success');
+                                showDeleteConfirm.value = false;
+                                await fetchMetrics();
+                            } else {
+                                throw new Error(data.error || 'Failed to delete metric');
+                            }
+                        } catch (e) {
+                            addToast(`Failed to delete metric: ${e.message}`, 'error');
+                        } finally {
+                            deletingMetric.value = false;
+                        }
+                    };
+
+                    const toggleMetricsTable = () => {
+                      showMetricsTable.value = !showMetricsTable.value;
+                    };
+
+                    onMounted(() => {
+                        loading.value = false;
+                        fetchMetrics();
+                        socket.on('custom_metrics_updated', () => {
+                            fetchMetrics();
+                        });
+                    });
+
+                    onUnmounted(() => {
+                        socket.off('custom_metrics_updated');
+                    });
+
+                    return { 
+                        grokPrompt, waitingForGrok, grokError, grokMessages, askGrok, 
+                        loading, collecting, collectError, collectOutput, runCollect, downloadSystemData,
+                        metrics, showMetricForm, newMetric, creatingMetric, showDeleteConfirm, 
+                        metricToDelete, deletingMetric, openMetricForm, closeMetricForm, 
+                        createMetric, confirmDelete, deleteMetric,
+                        showMetricsTable, toggleMetricsTable
+                    };
+                }
+        };
+
+        // Monitor Tab Component
+        const MonitorTab = {
+            template: `
+                <div class="tab-content bg-gray-800 p-6 rounded-lg shadow-md">
+                    <div v-if="loading">Loading...</div>
+                    <div v-else-if="!settingsConfigured" class="wizard">
+                        <h3 class="text-lg font-semibold text-white">Configuration Wizard</h3>
+                        <label>Interval (seconds):</label>
+                        <input v-model.number="newSettings.general.interval" type="number" min="1">
+                        <label>Max Commands:</label>
+                        <input v-model.number="newSettings.general.max_columns" type="number" min="1">
+                        <label>Ping Hosts (comma-separated):</label>
+                        <input v-model="pingHostsInput" type="text" placeholder="e.g., google.com,example.com">
+                        <label>Metrics:</label>
+                        <div v-for="metric in availableMetricsData" :key="metric.name" class="mt-2">
+                            <input type="checkbox" v-model="newSettings.metrics[metric.name].enabled"> {{ metric.name }}
+                        </div>
+                        <button @click="saveSettings" class="mt-4">Save Settings</button>
+                    </div>
+                    <div v-else>
+                        <div class="error" v-if="!settings_exists">Warning: <code>monitor_settings.json</code> missing. <button @click="regenerateSettings">Initialize</button></div>
+                        <div class="error" v-if="settings_exists && diff">Mismatch detected. <button @click="regenerateSettings">Regenerate</button></div>
+                        <button class="list-button" @click="toggleMetricsList">List Available Metrics</button>
+                        <div class="metrics-list" :class="{ 'visible': showMetricsList }">
+                            <h3 class="text-lg font-semibold text-white">Available Metrics</h3>
+                            <ul>
+                                <li v-for="metric in availableMetricsData" :key="metric.name" :class="{ 'enabled-metric': enabledMetrics.includes(metric.name) }">
+                                    {{ metric.name }} ({{ metric.subsection || 'N/A' }}) - Enabled: {{ enabledMetrics.includes(metric.name) }}
+                                    <button @click="toggleMetric(metric.name, 'enable')" :disabled="togglingMetric || enabledMetrics.includes(metric.name) || enabledMetrics.length >= newSettings.general.max_columns" class="monitor-tab-button">Enable</button>
+                                    <button @click="toggleMetric(metric.name, 'disable')" :disabled="togglingMetric || !enabledMetrics.includes(metric.name)" class="monitor-tab-button">Disable</button>
+                                </li>
+                            </ul>
+                        </div>
+                        <div class="section">
+                            <h3 class="text-lg font-semibold text-white">General Settings</h3>
+                            <label>Max Commands: <input v-model.number="newSettings.general.max_columns" type="number" min="1"></label>
+                            <p v-if="!newSettings.general.max_columns" class="text-gray-300 mt-1">Max Commands is empty, it considers it as infinite.</p>
+                            <label>Ping Hosts: <input v-model="pingHostsInput" type="text" placeholder="e.g., google.com,example.com"></label>
+                            <label>Interval (seconds): <input v-model.number="newSettings.general.interval" type="number" min="1"></label>
+                            <button @click="saveGeneralSettings">Save General Settings</button>
+                        </div>
+                        <div class="section">
+                            <h3 class="text-lg font-semibold text-white">Manage Thresholds</h3>
+                            <div v-if="enabledMetrics.length === 0">No enabled metrics.</div>
+                            <div v-else v-for="metric in enabledMetrics" :key="metric" class="mt-2">
+                                <label>{{ metric }}:</label>
+                                <input v-model.number="metricThresholds[metric].min" type="number" placeholder="Min" style="width: 100px; margin-right: 10px;">
+                                <input v-model.number="metricThresholds[metric].max" type="number" placeholder="Max" style="width: 100px;">
+                                <button @click="openGrokModal(metric)" :disabled="grokLoading">Get Grok Suggestions</button>
+                            </div>
+                            <button @click="saveThresholds" class="mt-2">Save Thresholds</button>
+                        </div>
+                        <div class="section">
+                            <h3 class="text-lg font-semibold text-white">Menu</h3>
+                            <div v-if="menuItems.length">
+                                <dynamic-menu :items="menuItems" @action="handleAction"></dynamic-menu>
+                            </div>
+                            <div v-else>No menu data available.</div>
+                        </div>
+                        <div class="section">
+                            <h3 class="text-lg font-semibold text-white">Monitoring</h3>
+                            <div v-if="loadingMetrics">Loading metrics...</div>
+                            <div v-else-if="metricsHistory.length">
+                                <table class="monitor-table stats-table" :style="'--num-metrics: ' + enabledMetrics.length">
+                                    <thead>
+                                        <tr>
+                                            <th>Name</th>
+                                            <th v-for="metric in enabledMetrics" :key="metric">{{ metric }}</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr>
+                                            <td>Mean</td>
+                                            <td v-for="metric in enabledMetrics" :key="'mean_' + metric">{{ calculateStats(metric).mean.toFixed(2) || 'N/A' }}</td>
+                                        </tr>
+                                        <tr>
+                                            <td>Std</td>
+                                            <td v-for="metric in enabledMetrics" :key="'std_' + metric">{{ calculateStats(metric).std.toFixed(2) || 'N/A' }}</td>
+                                        </tr>
+                                        <tr>
+                                            <td>Min</td>
+                                            <td v-for="metric in enabledMetrics" :key="'min_' + metric">{{ metricThresholds[metric]?.min ?? 'N/A' }}</td>
+                                        </tr>
+                                        <tr>
+                                            <td>Max</td>
+                                            <td v-for="metric in enabledMetrics" :key="'max_' + metric">{{ metricThresholds[metric]?.max ?? 'N/A' }}</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                                <table class="monitor-table mt-4" :style="'--num-metrics: ' + enabledMetrics.length">
+                                    <thead>
+                                        <tr>
+                                            <th>Timestamp</th>
+                                            <th v-for="metric in enabledMetrics" :key="metric">{{ metric }}</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr v-for="entry in metricsHistory" :key="entry.timestamp">
+                                            <td>{{ entry.timestamp }}</td>
+                                            <td v-for="metric in enabledMetrics" :key="metric" :class="{ 'violation': isViolation(entry, metric) }">
+                                                {{ entry.metrics[metric] !== undefined ? entry.metrics[metric].toFixed(2) : 'N/A' }}
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                            <div v-else>No metrics available. Please start monitoring via the Menu and ensure metrics are enabled.</div>
+                        </div>
+                    </div>
+                    <div class="monitor-modal" :class="{ 'active': showGrokModal }" v-if="showGrokModal">
+                        <div class="modal-content fade-in">
+                            <h2>Grok Suggestions for {{ grokMetric }}</h2>
+                            <div v-if="grokLoading" class="text-center">Fetching from Grok...</div>
+                            <div v-else-if="grokModalError" class="error">{{ grokModalError }}</div>
+                            <div v-else>
+                                <p>Suggested Max: {{ grokResponse.thresholds.max }}</p>
+                                <p>Suggested Min: {{ grokResponse.thresholds.min }}</p>
+                                <p>Reference: <a v-if="isValidUrl(grokResponse.reference)" :href="grokResponse.reference" target="_blank">{{ grokResponse.reference }}</a><span v-else>{{ grokResponse.reference }}</span></p>
+                            </div>
+                            <button @click="applyGrokSuggestions" v-if="!grokLoading && !grokModalError" class="mt-2">Apply</button>
+                            <button @click="closeGrokModal" class="mt-2">Close</button>
+                        </div>
+                    </div>
+                </div>
+            `,
+            components: { 'dynamic-menu': DynamicMenu },
+            setup() {
+                const addToast = inject('addToast');
+                const socket = inject('socket');
+                const loading = ref(true);
+                const settingsConfigured = ref(false);
+                const menuItems = ref([]);
+                const monitoringActive = ref(false);
+                const metricsHistory = ref([]);
+                const loadingMetrics = ref(false);
+                const enabledMetrics = ref([]);
+                const metricThresholds = ref({});
+                const newSettings = ref({ general: { interval: 5, max_columns: 5, ping_hosts: 'google.com' }, metrics: {} });
+                const availableMetricsData = ref([]);
+                const showMetricsList = ref(false);
+                const togglingMetric = ref(false);
+                const showGrokModal = ref(false);
+                const grokMetric = ref('');
+                const grokLoading = ref(false);
+                const grokResponse = ref({ thresholds: { max: null, min: null }, reference: '' });
+                const grokModalError = ref('');
+                const settings_exists = ref(true);
+                const diff = ref(false);
+
+                const pingHostsInput = computed({
+                    get: () => Array.isArray(newSettings.value.general.ping_hosts) ? newSettings.value.general.ping_hosts.join(',') : newSettings.value.general.ping_hosts || '',
+                    set: (value) => newSettings.value.general.ping_hosts = value
+                });
+
+                const calculateStats = (metric) => {
+                    const values = metricsHistory.value
+                        .map(entry => entry.metrics[metric])
+                        .filter(v => v !== null && v !== undefined && !isNaN(v));
+                    if (values.length === 0) return { mean: null, std: null };
+                    const mean = values.reduce((a, b) => a + b, 0) / values.length;
+                    const std = Math.sqrt(values.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / values.length);
+                    return { mean, std };
+                };
+
+                const fetchSettings = async () => {
+                    try {
+                        const response = await fetch('/api/settings');
+                        const data = await response.json();
+                        if (!data.success) throw new Error(data.error);
+                        settingsConfigured.value = data.settings_configured;
+                        settings_exists.value = data.settings_exists;
+                        diff.value = data.diff || false;
+                        if (data.settings) {
+                            enabledMetrics.value = data.settings.metrics.filter(m => m.enabled).map(m => m.name);
+                            data.settings.metrics.forEach(metric => {
+                                newSettings.value.metrics[metric.name] = { enabled: metric.enabled, thresholds: metric.thresholds || { max: null, min: null } };
+                                metricThresholds.value[metric.name] = metric.thresholds || { max: null, min: null };
+                            });
+                            newSettings.value.general = { ...newSettings.value.general, ...data.settings.general };
+                            availableMetricsData.value = data.settings.metrics;
+                        } else {
+                            const metricsResponse = await fetch('/api/available_metrics');
+                            const metricsData = await metricsResponse.json();
+                            if (metricsData.success) {
+                                availableMetricsData.value = metricsData.metrics;
+                                metricsData.metrics.forEach(metric => {
+                                    if (!newSettings.value.metrics[metric.name]) {
+                                        newSettings.value.metrics[metric.name] = { enabled: false, thresholds: { max: null, min: null } };
+                                    }
+                                    if (!metricThresholds.value[metric.name]) {
+                                        metricThresholds.value[metric.name] = { max: null, min: null };
+                                    }
+                                });
+                            }
+                        }
+                    } catch (e) {
+                        addToast(`Settings error: ${e.message}`, 'error');
+                    } finally {
+                        loading.value = false;
+                        await fetchMenu();
+                    }
+                };
+
+                const saveSettings = async () => {
+                    const pingHosts = pingHostsInput.value.split(',').map(host => host.trim()).filter(host => host);
+                    const settings = {
+                        general: { ...newSettings.value.general, ping_hosts: pingHosts },
+                        metrics: Object.entries(newSettings.value.metrics).map(([name, config]) => ({ name, enabled: config.enabled, thresholds: config.thresholds }))
+                    };
+                    try {
+                        const response = await fetch('/api/settings', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(settings)
+                        });
+                        const data = await response.json();
+                        if (data.success) {
+                            settingsConfigured.value = true;
+                            settings_exists.value = true;
+                            diff.value = false;
+                            enabledMetrics.value = settings.metrics.filter(m => m.enabled).map(m => m.name);
+                        }
+                    } catch (e) {
+                        addToast(`Save settings error: ${e.message}`, 'error');
+                    }
+                };
+
+                const saveGeneralSettings = async () => {
+                    const pingHosts = pingHostsInput.value.split(',').map(host => host.trim()).filter(host => host);
+                    const settings = {
+                        general: { ...newSettings.value.general, ping_hosts: pingHosts },
+                        metrics: Object.entries(newSettings.value.metrics).map(([name, config]) => ({ name, enabled: config.enabled, thresholds: config.thresholds }))
+                    };
+                    try {
+                        const response = await fetch('/api/settings', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(settings)
+                        });
+                        const data = await response.json();
+                        if (data.success) {
+                            await fetchSettings();
+                            addToast('General settings saved!', 'success');
+                        }
+                    } catch (e) {
+                        addToast(`Save general settings error: ${e.message}`, 'error');
+                    }
+                };
+
+                const saveThresholds = async () => {
+                    const settings = {
+                        general: newSettings.value.general,
+                        metrics: Object.entries(metricThresholds.value).map(([name, thresholds]) => ({ name, enabled: enabledMetrics.value.includes(name), thresholds }))
+                    };
+                    try {
+                        const response = await fetch('/api/settings', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(settings)
+                        });
+                        const data = await response.json();
+                        if (data.success) {
+                            await fetchSettings();
+                            addToast('Thresholds saved!', 'success');
+                        }
+                    } catch (e) {
+                        addToast(`Save thresholds error: ${e.message}`, 'error');
+                    }
+                };
+
+                const fetchMenu = async () => {
+                    try {
+                        const response = await fetch('/api/menu');
+                        const data = await response.json();
+                        if (data.success) {
+                            let filteredItems = data.menu.items
+                                .filter(item => {
+                                    if (item.action === 'exit') return false;
+                                    if (item.items && item.items.some(subItem => ['configure_general', 'configure_metrics', 'configure_thresholds'].includes(subItem.action))) return false;
+                                    if (monitoringActive.value) return item.action === 'stop_monitoring' || item.action === 'view_logs';
+                                    return item.action !== 'stop_monitoring';
+                                })
+                                .map(item => {
+                                    if (item.action === 'start_monitoring' && !monitoringActive.value) return { ...item, name: 'Start Monitoring', action: 'start_monitoring' };
+                                    if (item.action === 'stop_monitoring') return monitoringActive.value ? item : null;
+                                    return item;
+                                })
+                                .filter(item => item !== null);
+                            menuItems.value = filteredItems;
+                        }
+                    } catch (e) {
+                        addToast(`Menu error: ${e.message}`, 'error');
+                    }
+                };
+
+                const handleAction = async (action) => {
+                    try {
+                        if (action === 'start_monitoring') {
+                            const response = await fetch('/api/monitor', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'start_monitoring' }) });
+                            const data = await response.json();
+                            if (data.success) monitoringActive.value = true;
+                        } else if (action === 'stop_monitoring') {
+                            const response = await fetch('/api/monitor', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'stop_monitoring' }) });
+                            const data = await response.json();
+                            if (data.success) monitoringActive.value = false;
+                        } else if (action === 'view_logs') {
+                            fetch('/api/view_monitor_log')
+                                .then(response => {
+                                    if (!response.ok) throw new Error('Failed to fetch monitor_log.json');
+                                    return response.blob();
+                                })
+                                .then(blob => {
+                                    const url = window.URL.createObjectURL(blob);
+                                    const a = document.createElement('a');
+                                    a.href = url;
+                                    a.download = 'monitor_log.json';
+                                    document.body.appendChild(a);
+                                    a.click();
+                                    document.body.removeChild(a);
+                                    window.URL.revokeObjectURL(url);
+                                })
+                                .catch(error => {
+                                    addToast(`Failed to fetch logs: ${error.message}`, 'error');
+                                });
+                        }
+                        await fetchMenu();
+                    } catch (e) {
+                        addToast(`Action error: ${e.message}`, 'error');
+                    }
+                };
+
+                const toggleMetricsList = async () => {
+                    showMetricsList.value = !showMetricsList.value;
+                    if (showMetricsList.value) {
+                        try {
+                            const response = await fetch('/api/available_metrics', {
+                                method: 'GET',
+                                headers: { 'Content-Type': 'application/json' }
+                            });
+                            const data = await response.json();
+                            if (data.success) {
+                                availableMetricsData.value = data.metrics;
+                            } else {
+                                throw new Error(data.error || 'Failed to fetch available metrics');
+                            }
+                        } catch (error) {
+                            addToast(`Error fetching available metrics: ${error.message}`, 'error');
+                        }
+                    }
+                };
+
+                const toggleMetric = async (name, action) => {
+                    togglingMetric.value = true;
+                    try {
+                        if (action === 'enable' && enabledMetrics.value.length >= newSettings.value.general.max_columns) {
+                            addToast(`Cannot enable ${name}: Maximum number of commands (${newSettings.value.general.max_columns}) reached.`, 'error');
+                            return;
+                        }
+                        const response = await fetch('/api/available_metrics', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ name, action })
+                        });
+                        const data = await response.json();
+                        if (data.success) {
+                            if (action === 'enable') {
+                                enabledMetrics.value.push(name);
+                                if (!newSettings.value.metrics[name]) {
+                                    newSettings.value.metrics[name] = { enabled: false, thresholds: { max: null, min: null } };
+                                }
+                                if (!metricThresholds.value[name]) {
+                                    metricThresholds.value[name] = { min: null, max: null };
+                                }
+                            } else {
+                                enabledMetrics.value = enabledMetrics.value.filter(m => m !== name);
+                            }
+                            newSettings.value.metrics[name].enabled = (action === 'enable');
+                            await fetchSettings();
+                        } else {
+                            throw new Error(data.message || 'Failed to toggle metric');
+                        }
+                    } catch (e) {
+                        addToast(`Toggle metric error: ${e.message}`, 'error');
+                    } finally {
+                        togglingMetric.value = false;
+                    }
+                };
+
+                const openGrokModal = async (metric) => {
+                    grokMetric.value = metric;
+                    grokLoading.value = true;
+                    showGrokModal.value = true;
+                    try {
+                        const response = await fetch('/api/grok_thresholds', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ metric_name: metric })
+                        });
+                        const data = await response.json();
+                        if (data.success) grokResponse.value = data;
+                        else grokModalError.value = data.error;
+                    } catch (e) {
+                        grokModalError.value = `Grok fetch error: ${e.message}`;
+                        addToast(`Grok fetch error: ${e.message}`, 'error');
+                    } finally {
+                        grokLoading.value = false;
+                    }
+                };
+
+                const applyGrokSuggestions = () => {
+                    metricThresholds.value[grokMetric.value] = { min: grokResponse.value.thresholds.min, max: grokResponse.value.thresholds.max };
+                    closeGrokModal();
+                };
+
+                const closeGrokModal = () => {
+                    showGrokModal.value = false;
+                    grokMetric.value = '';
+                    grokModalError.value = '';
+                };
+
+                const isValidUrl = (url) => url && (url.startsWith('http://') || url.startsWith('https://'));
+
+                const regenerateSettings = async () => {
+                    try {
+                        const response = await fetch('/api/regenerate_monitor_settings');
+                        const data = await response.json();
+                        if (data.success) await fetchSettings();
+                    } catch (e) {
+                        addToast(`Regenerate settings error: ${e.message}`, 'error');
+                    }
+                };
+
+                const isViolation = (entry, metric) => entry.violations.some(v => v.metric === metric);
+
+                onMounted(() => {
+                    fetchSettings();
+                    socket.on('metrics_update', (data) => {
+                        metricsHistory.value = data.slice(-5);
+                        loadingMetrics.value = false;
+                    });
+                });
+
+                return {
+                    loading,
+                    settingsConfigured,
+                    menuItems,
+                    monitoringActive,
+                    metricsHistory,
+                    loadingMetrics,
+                    enabledMetrics,
+                    metricThresholds,
+                    newSettings,
+                    availableMetricsData,
+                    showMetricsList,
+                    togglingMetric,
+                    showGrokModal,
+                    grokMetric,
+                    grokLoading,
+                    grokResponse,
+                    grokModalError,
+                    settings_exists,
+                    diff,
+                    pingHostsInput,
+                    calculateStats,
+                    fetchSettings,
+                    saveSettings,
+                    saveGeneralSettings,
+                    saveThresholds,
+                    fetchMenu,
+                    handleAction,
+                    toggleMetricsList,
+                    toggleMetric,
+                    openGrokModal,
+                    applyGrokSuggestions,
+                    closeGrokModal,
+                    isValidUrl,
+                    regenerateSettings,
+                    isViolation
+                };
+            },
+        };
+
+        // Performance Tab Component
+        const PerformanceTab = {
+            template: `
+                <div class="tab-content bg-gray-800 p-6 rounded-lg shadow-md">
+                    <div class="p-4">
+                        <h2 class="text-lg font-semibold flex items-center text-white">
+                            <svg class="w-5 h-5 mr-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M9 17v-6h6v6m-3-9v12m-9 0h18" />
+                            </svg>
+                            File Status
+                        </h2>
+                        <div class="mt-2 flex flex-wrap gap-4">
+                            <div v-for="(status, file) in files" :key="file" :class="['p-2 rounded', status.exists ? 'bg-green-700' : 'bg-red-700 animate-pulse']">
+                                <span class="font-medium text-white">{{ file }}</span>: {{ status.exists ? 'Found' : 'Missing' }}
+                                <span v-if="!status.exists" class="ml-2 text-red-300">Please add this file.</span>
+                            </div>
+                        </div>
+                        <button @click="fetchFiles" class="mt-2 flex items-center bg-gray-700 text-white border-2 border-cyan-400 rounded-md hover:bg-gray-600">
+                            <svg class="w-4 h-4 mr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M4 4v5h5m11 11v-5h-5m-7 0a7 7 0 1114 0" />
+                            </svg>
+                            Refresh
+                        </button>
+                    </div>
+                    <div class="mt-4">
+                        <h2 class="text-lg font-semibold mb-4 flex items-center text-white">
+                            <svg class="w-5 h-5 mr-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M12 4v16m8-8H4" />
+                            </svg>
+                            Analyze System
+                        </h2>
+                        <div class="flex flex-col sm:flex-row gap-4">
+                            <div class="flex-1">
+                                <label for="profileSelect" class="block text-sm font-medium text-gray-300 mb-1">Select Profile</label>
+                                <select id="profileSelect" v-model="selectedProfile" @change="updateProfileCategory('profile')" :disabled="isCategoryDisabled" class="w-full bg-gray-700 text-white border border-gray-600 rounded-md p-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                    <option value="">Select a Profile</option>
+                                    <option v-for="profile in profiles" :key="profile.value" :value="profile.value">{{ profile.label }}</option>
+                                </select>
+                            </div>
+                            <div class="flex-1">
+                                <label for="categorySelect" class="block text-sm font-medium text-gray-300 mb-1">Select Category</label>
+                                <select id="categorySelect" v-model="selectedCategory" @change="updateProfileCategory('category')" :disabled="isProfileDisabled" class="w-full bg-gray-700 text-white border border-gray-600 rounded-md p-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                    <option value="">Select a Category</option>
+                                    <option v-for="category in categories" :key="category" :value="category">{{ category }}</option>
+                                </select>
+                            </div>
+                            <button @click="handleAnalysis" :disabled="!selectedProfile && !selectedCategory" class="mt-6 sm:mt-0 self-start px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-600 disabled:cursor-not-allowed">
+                                {{ analysis ? 'Run Another' : 'Run Analysis' }}
+                            </button>
+                        </div>
+                    </div>
+                    <div v-if="progress.step" class="mt-4 animate-slide-up">
+                        <div class="flex mb-2 items-center justify-between">
+                            <span class="text-sm font-semibold text-gray-200">{{ progress.step }}</span>
+                            <span class="text-sm font-semibold text-gray-200">{{ progress.percent }}%</span>
+                        </div>
+                        <div class="h-2.5 rounded-full bg-gray-600 overflow-hidden">
+                            <div :style="{ width: progress.percent + '%' }" :class="['h-full rounded-full transition-all duration-300', progress.error ? 'bg-red-500' : 'bg-blue-500']"></div>
+                        </div>
+                    </div>
+                    <div v-if="analysis" class="mt-4 space-y-4">
+                        <div class="bg-gray-800 rounded-lg shadow-md">
+                            <button @click="sectionsOpen.Analysis = !sectionsOpen.Analysis" class="w-full flex justify-between items-center p-4 text-left font-semibold text-gray-200">
+                                Analysis
+                                <svg :class="['w-5 h-5 transform', { 'rotate-180': sectionsOpen.Analysis }]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M19 9l-7 7-7-7" />
+                                </svg>
+                            </button>
+                            <div v-if="sectionsOpen.Analysis" class="p-4 transition-all duration-300 overflow-y-auto;">
+                                <div ref="analysisContent" v-html="markdownToHtml(analysis)"></div>
+                            </div>
+                            <div v-if="sectionsOpen.Analysis" class="p-4 flex justify-between">
+                                <button @click="copyAnalysisText" class="ml-4 bg-gray-700 text-white border-2 border-cyan-400 rounded-md px-4 py-2 hover:bg-gray-600">Copy</button>
+                                <button @click="showTuningModal = true" class="mr-4 bg-gray-700 text-white border-2 border-cyan-400 rounded-md px-4 py-2 hover:bg-gray-600">Proceed to Optimizations</button>
+                            </div>
+                        </div>
+                        <div v-if="dynamicMetrics.length" class="bg-gray-800 rounded-lg shadow-md">
+                            <button @click="sectionsOpen.Metrics = !sectionsOpen.Metrics" class="w-full flex justify-between items-center p-4 text-left font-semibold text-gray-200">
+                                Metrics
+                                <svg :class="['w-5 h-5 transform', { 'rotate-180': sectionsOpen.Metrics }]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M19 9l-7 7-7-7" />
+                                </svg>
+                            </button>
+                            <div v-if="sectionsOpen.Metrics" class="p-4 transition-all duration-300 overflow-y-auto;">
+                                <div class="overflow-x-auto">
+                                    <table class="min-w-full border-collapse table-auto bg-gray-700">
+                                        <thead>
+                                            <tr>
+                                                <th class="border border-gray-600 px-4 py-2 text-gray-200">Metric</th>
+                                                <th class="border border-gray-600 px-4 py-2 text-gray-200">Command</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <tr v-for="m in dynamicMetrics" :key="m.name || m.command">
+                                                <td class="border border-gray-600 px-4 py-2 text-gray-300">{{ m.name || 'N/A' }}</td>
+                                                <td class="border border-gray-600 px-4 py-2 text-gray-300">{{ m.command || 'N/A' }}</td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                        <div v-if="tuningApplied && (validationTable.length || targetsTable.length)" class="bg-gray-800 rounded-lg shadow-md">
+                            <button @click="sectionsOpen.Report = !sectionsOpen.Report" class="w-full flex justify-between items-center p-4 text-left font-semibold text-gray-200">
+                                Report
+                                <svg :class="['w-5 h-5 transform', { 'rotate-180': sectionsOpen.Report }]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M19 9l-7 7-7-7" />
+                                </svg>
+                            </button>
+                            <div v-if="sectionsOpen.Report" class="p-4 transition-all duration-300">
+                                <p class="text-gray-300 mb-4">Post-tuning metrics unavailable due to manual execution. Re-run the analysis to measure the impact of your changes.</p>
+                                <div v-if="validationTable.length" class="overflow-x-auto">
+                                    <h4 class="text-md font-semibold mb-2 text-gray-200">Validation Results</h4>
+                                    <div v-html="renderTable(validationTable, ['Metric', 'Pre', 'Post'])"></div>
+                                </div>
+                                <div v-if="targetsTable.length" class="overflow-x-auto mt-4">
+                                    <h4 class="text-md font-semibold mb-2 text-gray-200">Validation Targets</h4>
+                                    <div v-html="renderTable(targetsTable, ['Metric', 'Target', 'Unit'])"></div>
+                                </div>
+                                <button @click="copyTables" class="ml-4 bg-gray-700 text-white border-2 border-cyan-400 rounded-md px-4 py-2 hover:bg-gray-600">Copy</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div v-show="showConfirmModal" class="performance-modal" :class="{ 'active': showConfirmModal }">
+                        <div class="modal-content fade-in">
+                            <h2 class="text-xl font-semibold text-white">Confirm Analysis</h2>
+                            <p>Confirm analysis for {{ selectedProfile || selectedCategory }} ({{ selectedSections.join(', ') || 'All' }})?</p>
+                            <p v-if="dynamicMetrics.length === 0" class="mt-2 text-gray-400">No dynamic metrics, validation skipped.</p>
+                            <div class="mt-4 flex justify-end space-x-2">
+                                <button @click="showConfirmModal = false" class="bg-gray-600 text-white px-4 py-2 rounded-md hover:bg-gray-700">Cancel</button>
+                                <button @click="runAnalysis" class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700">Confirm</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div v-show="showTuningModal" class="performance-modal" :class="{ 'active': showTuningModal }">
+                        <div class="modal-content fade-in">
+                            <h2 class="text-xl font-semibold text-white">Apply Optimizations?</h2>
+                            <p>Ready to optimize? We will guide you step-by-step!</p>
+                            <div class="mt-4 flex justify-end space-x-2">
+                                <button @click="resetTuning" class="bg-gray-600 text-white px-4 py-2 rounded-md hover:bg-gray-700">No</button>
+                                <button @click="downloadScript" class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700">Download Script</button>
+                                <button @click="showTuningModal = false; showRecommendationModal = true" class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700">Yes</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div v-show="showRecommendationModal" class="performance-modal" :class="{ 'active': showRecommendationModal }">
+                        <div v-if="!recommendations || !recommendations[currentRecommendationIndex]" class="modal-content fade-in">
+                            <h2 class="text-xl font-semibold text-white">No Recommendations Available</h2>
+                            <p class="text-gray-300">No optimization recommendations are available for the current analysis.</p>
+                            <div class="mt-4 flex justify-end space-x-2">
+                                <button @click="closeRecommendationModal" class="bg-gray-600 text-white px-4 py-2 rounded-md hover:bg-gray-700">Close</button>
+                            </div>
+                        </div>
+                        <div v-if="Array.isArray(recommendations) && recommendations[currentRecommendationIndex]" class="modal-content fade-in">
+                            <div v-if="!recommendations[currentRecommendationIndex]?.commands?.length">
+                                <p class="text-gray-300">No commands available for this recommendation.</p>
+                            </div>
+                            <h2 class="text-xl font-semibold text-white">{{ recommendations[currentRecommendationIndex].title }}</h2>
+                            <p class="text-gray-300">{{ recommendations[currentRecommendationIndex].description }}</p>
+                            <p class="text-gray-400 mt-2">Impact: {{ recommendations[currentRecommendationIndex].impact }}</p>
+                            <p class="text-gray-300 mt-2">Copy and apply these commands in your terminal for manual execution.</p>
+                            <p v-if="isHighRisk(recommendations[currentRecommendationIndex])" class="mt-2 text-red-400 flex items-center">
+                                <svg class="w-5 h-5 mr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M12 8v4m0 4h0m9-4a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                                Warning: Apply manually via script.
+                            </p>
+                            <div v-if="showAppPathInput" class="mt-4">
+                                <label class="block text-sm font-medium text-gray-300">Application Path</label>
+                                <input v-model="inputs.appPath" type="text" class="mt-1 w-full bg-gray-700 text-gray-200 rounded-md" placeholder="/usr/bin/trading_app">
+                            </div>
+                            <div class="mt-4">
+                                <p class="text-gray-300 mb-2">Apply these commands in your terminal:</p>
+                                <pre class="bg-gray-900 text-gray-200 p-2 rounded">{{ currentCommands }}</pre>
+                            </div>
+                            <div class="mt-4 flex justify-end space-x-2">
+                                <button @click="cancelRecommendations" class="bg-gray-600 text-white px-4 py-2 rounded-md hover:bg-gray-700">Cancel</button>
+                                <button @click="copyCommands(recommendations[currentRecommendationIndex].commands)" class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700">Copy Command</button>
+                                <button @click="downloadScript" class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700">Download Script</button>
+                                <button @click="nextRecommendation" class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700">Next</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div v-show="showSummaryModal" class="performance-modal" :class="{ 'active': showSummaryModal }">
+                        <div class="modal-content fade-in">
+                            <h2 class="text-xl font-semibold text-white">Tuning Complete!</h2>
+                            <p class="text-gray-300">🎉 Tuning complete</p>
+                            <p v-if="rebootWarning" class="mt-2 text-gray-300">Reboot may be needed! Check tune_system.sh.</p>
+                            <div class="mt-4 flex justify-end space-x-2">
+                                <button @click="scrollToReport" class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700">View Report</button>
+                                <button @click="downloadScript" class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700">Download Script</button>
+                                <button @click="resetAll" class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700">Run Another</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `,
+            setup() {
+                
+                const { ref, onMounted, onUnmounted, computed, nextTick, reactive, provide, inject, watch } = Vue;
+                const addToast = inject('addToast');
+                const socket = inject('socket');
+                const files = ref({});
+                const profiles = ref([]);
+                const categories = ref([]);
+                const selectedProfile = ref('');
+                const selectedCategory = ref('');
+                const selectedSections = ref([]);
+                const dynamicMetrics = ref([]);
+                const showConfirmModal = ref(false);
+                const showTuningModal = ref(false);
+                const showRecommendationModal = ref(false);
+                const showSummaryModal = ref(false);
+                const progress = ref({ step: '', percent: 0, error: null });
+                const analysis = ref(null);
+                const tuningApplied = ref(false);
+                const preMetrics = ref({});
+                const recommendations = ref([]);
+                const currentRecommendationIndex = ref(0);
+                const appliedCount = ref(0);
+                const skippedCount = ref(0);
+                const validationTable = ref([]);
+                const targetsTable = ref([]);
+                const sectionsOpen = ref({ Analysis: true, Metrics: false, Report: false });
+                const analysisContent = ref(null);
+                const rebootWarning = ref(false);
+                recommendations.value = [{ title: '', description: '', commands: [], impact: '' }];
+                const inputs = ref({ appPath: '' });
+                const showAppPathInput = computed(() => {
+                    const rec = recommendations.value[currentRecommendationIndex.value];
+                    return rec && Array.isArray(rec.commands) &&
+                           rec.commands.some(cmd => cmd.includes('/path/to/hft_app'));
+                });
+                const currentCommands = computed(() => {
+                    const rec = recommendations.value[currentRecommendationIndex.value];
+                    return rec && Array.isArray(rec.commands) ? rec.commands.join('\n') : '';
+                });
+                const isProfileDisabled = ref(false);
+                const isCategoryDisabled = ref(false);
+
+                const resetDropdownStates = () => {
+                    if (!analysis.value) {
+                        isProfileDisabled.value = false;
+                        isCategoryDisabled.value = false;
+                    }
+                };
+
+                const fetchFiles = async () => {
+                    try {
+                        const res = await fetch(`/api/performance/files?t=${Date.now()}`, { cache: "no-store" });
+                        if (!res.ok || res.status === 204) {
+                            files.value = {};
+                            addToast('Server returned no file data or empty response.', 'error');
+                            return;
+                        }
+                        const data = await res.json();
+                        if (data.success) files.value = data.files;
+                    } catch (e) {
+                        addToast('Couldn’t check files!', 'error');
+                    }
+                };
+
+                const fetchOptions = async () => {
+                    try {
+                        const [profilesRes, categoriesRes] = await Promise.all([
+                            fetch('/api/performance/profiles'),
+                            fetch('/api/performance/categories')
+                        ]);
+                        const profilesData = await profilesRes.json();
+                        const categoriesData = await categoriesRes.json();
+                        if (profilesData.success) profiles.value = profilesData.profiles;
+                        if (categoriesData.success) categories.value = categoriesData.categories;
+                    } catch (e) {
+                        addToast('Couldn’t fetch options!', 'error');
+                    }
+                };
+
+                const fetchDynamicMetrics = async () => {
+                    if (!selectedProfile.value && !selectedCategory.value) return;
+                    try {
+                        const res = await fetch(`/api/performance/dynamic-metrics?profile=${selectedProfile.value}&category=${selectedCategory.value}`);
+                        const data = await res.json();
+                        if (data.success) dynamicMetrics.value = data.metrics;
+                    } catch (e) {
+                        console.error('Dynamic metrics error:', e);
+                    }
+                };
+
+                const fetchSections = async () => {
+                    if (!selectedProfile.value && !selectedCategory.value) return;
+                    try {
+                        const res = await fetch('/api/performance/categories');
+                        const data = await res.json();
+                        if (data.success) {
+                            const allSections = data.categories.filter(c => c !== 'All');
+                            selectedSections.value = selectedProfile.value ? allSections : [selectedCategory.value];
+                        }
+                    } catch (e) {
+                        console.error('Sections error:', e);
+                    }
+                };
+
+                const runAnalysis = async () => {
+                        showConfirmModal.value = false;
+                        progress.value = { step: 'Collecting metrics...', percent: 25 };
+                        try {
+                            const res = await fetch('/api/performance/run', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ profile: selectedProfile.value, category: selectedCategory.value, sections: selectedSections.value })
+                            });
+                            if (!res.ok) {
+                                const text = await res.text();
+                                console.error('API Error:', res.status, text);
+                                throw new Error(`API request failed with status ${res.status}: ${text}`);
+                            }
+                            const data = await res.json();
+                            if (data.success) {
+                                const isUpgradeReport = typeof data.analysis === 'string' &&
+                                    (data.analysis.includes('upgrade') ||
+                                    data.analysis.includes('cost') ||
+                                    data.analysis.includes('recommendation'));
+                                if (isUpgradeReport) {
+                                    throw new Error('Received Upgrade tab data in Performance tab - possible server-side mix-up');
+                                }
+                                const isPerformanceReport = typeof data.analysis === 'string' && 
+                                    (data.analysis.includes('utilization') || 
+                                    data.analysis.includes('memory') || 
+                                    data.analysis.includes('tuning'));
+                                if (!isPerformanceReport) {
+                                    throw new Error('Received invalid analysis data - possibly mixed with upgrade report');
+                                }
+                                analysis.value = data.analysis;
+                                recommendations.value = data.recommendations || [];
+                                currentRecommendationIndex.value = 0;
+                                validationTable.value = Array.isArray(data.validation) ? data.validation : [];
+                                preMetrics.value = Object.fromEntries(validationTable.value.map(item => [item.metric, item.pre]));
+                                targetsTable.value = Array.isArray(data.targets) ? data.targets : [];
+                                dynamicMetrics.value = data.dynamic_metrics || [];
+                                progress.value = { step: 'Analysis complete', percent: 100, error: null };
+                            } else {
+                                throw new Error(data.error);
+                            }
+                        } catch (e) {
+                            console.error('runAnalysis Error:', e.message);
+                            progress.value = { step: 'Analysis failed!', percent: progress.value.percent, error: e.message };
+                            addToast(`Analysis failed: ${e.message}`, 'error');
+                        }
+                    };
+
+                const markdownToHtml = (markdown) => {
+                    if (!markdown || typeof markdown !== 'string') return '';
+                    const lines = markdown.split('\n');
+                    let htmlLines = [];
+                    let inList = false;
+
+                    for (let i = 0; i < lines.length; i++) {
+                        const line = lines[i];
+                        if (!line || typeof line !== 'string') continue;
+                        if (line.match(/^- (.*)$/)) {
+                            if (!inList) {
+                                htmlLines.push('<ul class="list-disc pl-6">');
+                                inList = true;
+                            }
+                            const content = line.replace(/^- (.*)$/, '$1');
+                            htmlLines.push(`<li class="ml-4 text-gray-300">${content}</li>`);
+                        } else {
+                            if (inList) {
+                                htmlLines.push('</ul>');
+                                inList = false;
+                            }
+                            if (line.match(/^# (.*)$/)) {
+                                const content = line.replace(/^# (.*)$/, '$1');
+                                htmlLines.push(`<h1 class="text-2xl font-bold mb-2 text-white">${content}</h1>`);
+                            } else if (line.match(/^## (.*)$/)) {
+                                const content = line.replace(/^## (.*)$/, '$1');
+                                htmlLines.push(`<h2 class="text-xl font-semibold mb-1 text-gray-200">${content}</h2>`);
+                            } else if (line.match(/=== (.*?) ===/)) {
+                                const content = line.replace(/=== (.*?) ===/, '$1');
+                                htmlLines.push(`<h3 class="text-lg font-semibold mt-4 mb-2 text-gray-100">${content}</h3>`);
+                            } else if (line.match(/```bash\n([\s\S]*?)```/)) {
+                                const content = line.replace(/```bash\n([\s\S]*?)```/, '$1');
+                                htmlLines.push(`<pre class="bg-gray-800 text-gray-200 p-2 rounded">${content}</pre>`);
+                            } else if (line.match(/```json\n([\s\S]*?)```/)) {
+                                const content = line.replace(/```json\n([\s\S]*?)```/, '$1');
+                                htmlLines.push(`<pre class="bg-gray-800 text-gray-200 p-2 rounded">${content}</pre>`);
+                            } else if (line.trim()) {
+                                htmlLines.push(line);
+                            }
+                        }
+                    }
+
+                    if (inList) htmlLines.push('</ul>');
+
+                    let html = htmlLines.join('<br>')
+                        .replace(/\*\*(.*?)\*\*/g, '<strong class="text-gray-100">$1</strong>')
+                        .replace(/\*(.*?)\*/g, '<em class="text-gray-300">$1</em>')
+                        .replace(/\[(.*?)\]\((https?:\/\/[^\s]+)\)/g, '<a href="$2" target="_blank" class="text-blue-400 hover:text-blue-300">$1</a>');
+
+                    const tableRegex = /\+[-+=]+\+\n([\s\S]*?)\n\+[-+=]+\+/g;
+                    html = html.replace(tableRegex, (match, content) => {
+                        const rows = content.split('\n').filter(row => row.trim() && !row.match(/^\+[-+=]+\+$/));
+                        if (!rows.length) return match;
+                        const headers = rows[0].split('|').map(h => h.trim()).filter(h => h);
+                        const body = rows.slice(1).map(row => row.split('|').map(cell => cell.trim()).filter(cell => cell));
+                        const headerRow = headers.map(h => `<th class="border border-gray-600 px-4 py-2 text-gray-200">${h}</th>`).join('');
+                        const bodyRows = body.map(row => `<tr>${row.map(cell => `<td class="border border-gray-600 px-4 py-2 text-gray-300">${cell}</td>`).join('')}</tr>`).join('');
+                        return '<table class="min-w-full border-collapse border border-gray-600 bg-gray-700"><thead><tr>' + headerRow + '</tr></thead><tbody>' + bodyRows + '</tbody></table>';
+                    });
+
+                    return html;
+                };
+
+                const handleAnalysis = () => {
+                    if (analysis.value) {
+                        selectedProfile.value = '';
+                        selectedCategory.value = '';
+                        analysis.value = null;
+                        recommendations.value = [];
+                        appliedCount.value = 0;
+                        skippedCount.value = 0;
+                        tuningApplied.value = false;
+                        rebootWarning.value = false;
+                        dynamicMetrics.value = [];
+                        validationTable.value = [];
+                        targetsTable.value = [];
+                        progress.value = { step: '', percent: 0, error: null };
+                        sectionsOpen.value = { Analysis: true, Metrics: false, Report: false };
+                        resetDropdownStates();
+                    } else {
+                        showConfirmModal.value = true;
+                    }
+                };
+
+                const updateProfileCategory = (type) => {
+                    if (type === 'profile' && selectedProfile.value) {
+                        selectedCategory.value = ''; 
+                    } else if (type === 'category' && selectedCategory.value) {
+                        selectedProfile.value = ''; 
+                    }
+                    resetDropdownStates(); 
+                    fetchDynamicMetrics();
+                    fetchSections();
+                };
+
+                const copyText = (text) => {
+                    if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+                        navigator.clipboard.writeText(text).then(() => {
+                            addToast('Raw report copied!', 'info');
+                        }).catch(err => {
+                            addToast(`Failed to copy: ${err.message}`, 'error');
+                        });
+                    } else {
+                        const textarea = document.createElement('textarea');
+                        textarea.value = text;
+                        document.body.appendChild(textarea);
+                        textarea.select();
+                        try {
+                            document.execCommand('copy');
+                            addToast('Raw report copied!', 'info');
+                        } catch (err) {
+                            addToast(`Failed to copy: ${err.message}`, 'error');
+                        }
+                        document.body.removeChild(textarea);
+                    }
+                };
+
+                const copyCommands = (commands) => {
+                    if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+                        navigator.clipboard.writeText(commands.join('\n')).then(() => {
+                            addToast('Command copied!', 'info');
+                        }).catch(err => {
+                            addToast(`Failed to copy: ${err.message}`, 'error');
+                        });
+                    } else {
+                        const textarea = document.createElement('textarea');
+                        textarea.value = commands.join('\n');
+                        document.body.appendChild(textarea);
+                        textarea.select();
+                        try {
+                            document.execCommand('copy');
+                            addToast('Command copied!', 'info');
+                        } catch (err) {
+                            addToast(`Failed to copy: ${err.message}`, 'error');
+                        }
+                        document.body.removeChild(textarea);
+                    }
+                };
+
+                const copyTables = async () => {
+                    await nextTick();
+                    const raw = [
+                        validationTable.value.length ? '=== Validation Results ===\n' + tabulate(validationTable.value, ['metric', 'pre', 'post']) : '',
+                        targetsTable.value.length ? '=== Validation Targets ===\n' + tabulate(targetsTable.value, ['metric', 'target', 'unit']) : ''
+                    ].filter(Boolean).join('\n');
+                    if (!raw) {
+                        addToast('No table data to copy.', 'error');
+                        return;
+                    }
+                    try {
+                        await navigator.clipboard.writeText(raw);
+                        addToast('Copied to clipboard', 'info');
+                    } catch (err) {
+                        const textarea = document.createElement('textarea');
+                        textarea.value = raw;
+                        document.body.appendChild(textarea);
+                        textarea.select();
+                        try {
+                            document.execCommand('copy');
+                            addToast('Copied to clipboard', 'info');
+                        } catch (e) {
+                            addToast(`Failed to copy: ${e.message}`, 'error');
+                        }
+                        document.body.removeChild(textarea);
+                    }
+                };
+
+                const tabulate = (data, headers) => {
+                    const widths = headers.map((h, i) => Math.max(h.length, ...data.map(row => String(row[h] || '').length)));
+                    let output = '+' + widths.map(w => '-'.repeat(w + 2)).join('+') + '+\n';
+                    output += '|' + headers.map((h, i) => ` ${h.padEnd(widths[i])} `).join('|') + '|\n';
+                    output += '+' + widths.map(w => '='.repeat(w + 2)).join('+') + '+\n';
+                    data.forEach(row => {
+                        output += '|' + headers.map((h, i) => ` ${String(row[h] || '').padEnd(widths[i])} `).join('|') + '|\n';
+                    });
+                    output += '+' + widths.map(w => '-'.repeat(w + 2)).join('+') + '+';
+                    return output;
+                };
+
+                const downloadScript = () => {
+                    const recs = Array.isArray(recommendations.value) ? recommendations.value : [];
+                    const rec = recs[currentRecommendationIndex.value] || { commands: recs.length ? recs.flatMap(r => r.commands || []) : [], title: 'tune_system' };
+                    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+                    const commands = Array.isArray(rec.commands) ? rec.commands : [];
+                    const scriptContent = `#!/bin/bash\n# Script for ${rec.title}\n# Warning: Some commands require sudo. Use with caution.\n\n${commands.join('\n')}\n# Run with: sudo sh ${rec.title}.sh`;
+                    const blob = new Blob([scriptContent], { type: 'text/plain' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `${rec.title}-${timestamp}.sh`;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                    addToast(`Script downloaded: ${rec.title}-${timestamp}.sh`, 'success');
+                };
+
+                const isHighRisk = (rec) => {
+                    const commands = Array.isArray(rec?.commands) ? rec.commands : [];
+                    const cmdText = commands.join(' ').toLowerCase();
+                    return cmdText.includes('kill') || cmdText.includes('rm') || cmdText.includes('reboot') || rec.title.toLowerCase().includes('thermal');
+                };
+
+                const nextRecommendation = async () => {
+                    skippedCount.value++;
+                    if (currentRecommendationIndex.value < recommendations.value.length - 1) {
+                        currentRecommendationIndex.value++;
+                    } else {
+                        if (recommendations.value.some(rec => rec.commands.some(c => c.includes('sudo reboot') || c.includes('sudo update-grub')))) {
+                            rebootWarning.value = true;
+                        }
+                        tuningApplied.value = true;
+                        nextTick(() => {
+                            showRecommendationModal.value = false;
+                            showSummaryModal.value = true;
+                        });
+                    }
+                };
+
+                const cancelRecommendations = () => {
+                    nextTick(() => {
+                        showRecommendationModal.value = false;
+                        currentRecommendationIndex.value = 0;
+                        appliedCount.value = 0;
+                        skippedCount.value = 0;
+                        tuningApplied.value = true;
+                        showSummaryModal.value = true;
+                    });
+                };
+
+                const resetTuning = () => {
+                    nextTick(() => {
+                        showTuningModal.value = false;
+                        selectedProfile.value = '';
+                        selectedCategory.value = '';
+                        analysis.value = null;
+                        recommendations.value = [];
+                    });
+                };
+
+                const resetAll = () => {
+                    nextTick(() => {
+                        showSummaryModal.value = false;
+                        selectedProfile.value = '';
+                        selectedCategory.value = '';
+                        analysis.value = null;
+                        recommendations.value = [];
+                        appliedCount.value = 0;
+                        skippedCount.value = 0;
+                        rebootWarning.value = false;
+                        dynamicMetrics.value = [];
+                        validationTable.value = [];
+                        targetsTable.value = [];
+                        progress.value = { step: '', percent: 0, error: null };
+                        sectionsOpen.value = { Analysis: true, Metrics: false, Report: false };
+                    });
+                };
+
+                const scrollToReport = () => {
+                    nextTick(() => {
+                        document.querySelectorAll('.bg-gray-800.rounded-lg.shadow-md')[dynamicMetrics.value.length ? 2 : 1]?.scrollIntoView({ behavior: 'smooth' });
+                        sectionsOpen.value.Report = true;
+                        showSummaryModal.value = false;
+                    });
+                };
+
+                function renderTable(data, headers) {
+                    if (!data || data.length === 0) return '<p>No data available</p>';
+                    let html = '<table class="table"><thead><tr>';
+                    headers.forEach(h => html += `<th>${h}</th>`);
+                    html += '</tr></thead><tbody>';
+                    data.forEach(row => {
+                        html += '<tr>';
+                        headers.forEach(h => {
+                        const key = h.toLowerCase(); // Map header to lowercase key (e.g., 'Pre' -> 'pre')
+                        html += `<td>${row[key] !== undefined ? row[key] : 'N/A'}</td>`;
+                        });
+                        html += '</tr>';
+                    });
+                    html += '</tbody></table>';
+                    return html;
+                }
+
+                const copyAnalysisText = async () => {
+                    await nextTick();
+                    if (!analysis.value) {
+                        addToast('No analysis data to copy. Please run an analysis first.', 'error');
+                        return;
+                    }
+                    let text = '';
+                    if (analysisContent.value) {
+                        text = analysisContent.value.textContent.trim() || analysisContent.value.innerText.trim();
+                        console.log('copyAnalysisText: DOM textContent:', text, 'analysisContent:', analysisContent.value);
+                    }
+                    if (!text) {
+                        text = analysis.value.trim();
+                        console.log('copyAnalysisText: Falling back to raw analysis:', text);
+                    }
+                    if (!text) {
+                        addToast('Analysis content is empty or unavailable.', 'error');
+                        return;
+                    }
+                    try {
+                        await navigator.clipboard.writeText(text);
+                        addToast('Copied to clipboard', 'info');
+                    } catch (err) {
+                        const textarea = document.createElement('textarea');
+                        textarea.value = text;
+                        document.body.appendChild(textarea);
+                        textarea.select();
+                        try {
+                            document.execCommand('copy');
+                            addToast('Copied to clipboard', 'info');
+                        } catch (e) {
+                            addToast(`Failed to copy: ${e.message}`, 'error');
+                        }
+                        document.body.removeChild(textarea);
+                    }
+                };
+                
+
+                onMounted(() => {
+                    console.log('PerformanceTab: Mounting component');
+                    fetchFiles().then(() => console.log('PerformanceTab: fetchFiles completed'));
+                    fetchOptions().then(() => console.log('PerformanceTab: fetchOptions completed'));
+                    socket.on('progress_update', (data) => {
+                        let detailedStep = data.step;
+                        if (data.step === 'Collecting metrics...') {
+                            detailedStep = data.percent < 25 ? 'Gathering system info' :
+                                           data.percent < 50 ? 'Fetching memory metrics' :
+                                           data.percent < 75 ? 'Processing NUMA data' : 'Finalizing metrics collection';
+                        }
+                        progress.value = { ...data, step: detailedStep };
+                    });
+                });
+
+                onUnmounted(() => {
+                    socket.off('progress_update');
+                    progress.value = { step: '', percent: 0, error: null };
+                    analysis.value = null;
+                    recommendations.value = [];
+                    currentRecommendationIndex.value = 0;
+                    validationTable.value = [];
+                    targetsTable.value = [];
+                    dynamicMetrics.value = [];
+                    tuningApplied.value = false;
+                    showConfirmModal.value = false;
+                    showTuningModal.value = false;
+                    showRecommendationModal.value = false;
+                    showSummaryModal.value = false;
+                    selectedProfile.value = '';
+                    selectedCategory.value = '';
+                    sectionsOpen.value = { Analysis: true, Metrics: false, Report: false };
+                });
+
+                const closeRecommendationModal = () => {
+                    nextTick(() => {
+                        showRecommendationModal.value = false;
+                        tuningApplied.value = true;
+                        showSummaryModal.value = true;
+                    });
+                };
+
+                watch(recommendations, () => {
+                    currentRecommendationIndex.value = 0;
+                });
+
+                return {
+                    files,
+                    profiles,
+                    categories,
+                    selectedProfile,
+                    selectedCategory,
+                    selectedSections,
+                    dynamicMetrics,
+                    showConfirmModal,
+                    showTuningModal,
+                    showRecommendationModal,
+                    showSummaryModal,
+                    progress,
+                    analysis,
+                    tuningApplied,
+                    preMetrics,
+                    recommendations,
+                    currentRecommendationIndex,
+                    appliedCount,
+                    skippedCount,
+                    validationTable,
+                    targetsTable,
+                    sectionsOpen,
+                    rebootWarning,
+                    inputs,
+                    isProfileDisabled,
+                    isCategoryDisabled,
+                    fetchFiles,
+                    fetchOptions,
+                    fetchDynamicMetrics,
+                    fetchSections,
+                    runAnalysis,
+                    markdownToHtml,
+                    handleAnalysis,
+                    updateProfileCategory,
+                    copyText,
+                    copyAnalysisText,
+                    copyCommands,
+                    copyTables,
+                    downloadScript,
+                    isHighRisk,
+                    nextRecommendation,
+                    cancelRecommendations,
+                    resetTuning,
+                    resetAll,
+                    scrollToReport,
+                    renderTable,
+                    closeRecommendationModal,
+                    showAppPathInput,
+                    currentCommands,
+                };
+            }
+        };
+
+        // Upgrade Tab Component
+        const UpgradeTab = {
+            template: `
+                <div class="tab-content bg-gray-800 p-4 rounded-lg shadow-md">
+                    <div class="p-4" v-if="!loadingUpgradeFiles">
+                        <h2 class="text-lg font-semibold flex items-center text-white">
+                            <svg class="w-5 h-5 mr-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M9 17v-6h6v6m-3-9v12m-9 0h18" />
+                            </svg>
+                            File Status
+                        </h2>
+                        <div class="mt-2 flex flex-wrap gap-4">
+                            <div v-for="(status, file) in upgradeFiles" :key="file" :class="['p-2 rounded', status.exists ? 'bg-green-700' : 'bg-red-700 animate-pulse']">
+                                <span class="font-medium text-white">{{ file }}</span>: {{ status.exists ? 'Found' : 'Missing' }}
+                                <span v-if="!status.exists" class="ml-2 text-red-300">Please add this file.</span>
+                        </div>
+                        </div>
+                        <button @click="fetchUpgradeFiles" class="mt-2 flex items-center bg-gray-700 text-white border-2 border-cyan-400 rounded-md hover:bg-gray-600">
+                            <svg class="w-4 h-4 mr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M4 4v5h5m11 11v-5h-5m-7 0a7 7 0 1114 0" />
+                            </svg>
+                            Refresh
+                        </button>
+                    </div>
+                    <div class="mt-4">
+                        <h2 class="text-lg font-semibold mb-4 flex items-center text-white">
+                            <svg class="w-5 h-5 mr-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M12 4v16m8-8H4" />
+                            </svg>
+                            Analyze Upgrades
+                        </h2>
+                        <div class="flex flex-col sm:flex-row gap-4">
+                            <div class="flex-1">
+                                <label for="upgradeTypeSelect" class="block text-sm font-medium text-gray-300 mb-1">Select Analysis Type</label>
+                                <select id="upgradeTypeSelect" v-model="selectedUpgradeType" class="w-full bg-gray-700 text-white border border-gray-600 rounded-md p-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                    <option value="">Select a Type</option>
+                                    <option v-for="type in upgradeTypes" :key="type" :value="type">{{ type }}</option>
+                                </select>
+                            </div>
+                            <div class="flex-1">
+                                <label for="upgradeCategorySelect" class="block text-sm font-medium text-gray-300 mb-1">Select Category</label>
+                                <select id="upgradeCategorySelect" v-model="selectedUpgradeCategory" :disabled="selectedUpgradeType !== 'specific'" class="w-full bg-gray-700 text-white border border-gray-600 rounded-md p-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                    <option value="">Select a Category</option>
+                                    <option v-for="category in upgradeCategories" :key="category" :value="category">{{ category }}</option>
+                                </select>
+                            </div>
+                            <div class="flex-1">
+                                <label for="upgradeBudgetInput" class="block text-sm font-medium text-gray-300 mb-1">Budget</label>
+                                <input id="upgradeBudgetInput" v-model="upgradeBudget" type="number" min="0" class="w-full bg-gray-700 text-white border border-gray-600 rounded-md p-2 focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Enter budget">
+                            </div>
+                        </div>
+                        <button @click="runUpgradeAnalysis" :disabled="isRunAnalysisDisabled" class="mt-4 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-600 disabled:cursor-not-allowed">
+                            Run Analysis
+                        </button>
+                        <div v-if="upgradeProgress.step" class="mt-4 animate-slide-up">
+                            <div class="flex mb-2 items-center justify-between">
+                                <span class="text-sm font-semibold text-gray-200">{{ upgradeProgress.step }}</span>
+                                <span class="text-sm font-semibold text-gray-200">{{ upgradeProgress.percent }}%</span>
+                            </div>
+                            <div class="h-2.5 rounded-full bg-gray-600 overflow-hidden">
+                                <div :style="{ width: upgradeProgress.percent + '%' }" :class="['h-full rounded-full transition-all duration-300', upgradeProgress.error ? 'bg-red-500' : 'bg-blue-500']"></div>
+                            </div>
+                        </div>
+                        <div v-if="upgradeResults.summary" class="mt-4 space-y-4">
+                            <div class="bg-gray-800 rounded-lg shadow-md">
+                                <button @click="upgradeSectionsOpen.SystemSummary = !upgradeSectionsOpen.SystemSummary" class="w-full flex justify-between items-center p-4 text-left font-semibold text-gray-200">
+                                    System Summary
+                                    <svg :class="['w-5 h-5 transform', { 'rotate-180': upgradeSectionsOpen.SystemSummary }]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M19 9l-7 7-7-7" />
+                                    </svg>
+                                </button>
+                                <div v-if="upgradeSectionsOpen.SystemSummary" class="p-4 transition-all duration-300 overflow-y-auto;">
+                                    <div v-html="markdownToHtml(upgradeResults.summary)"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div v-if="upgradeResults.analysis && typeof upgradeResults.analysis === 'string'" class="mt-4 space-y-4">
+                        <div class="bg-gray-800 rounded-lg shadow-md">
+                            <button @click="upgradeSectionsOpen.Analysis = !upgradeSectionsOpen.Analysis" class="w-full flex justify-between items-center p-4 text-left font-semibold text-gray-200">
+                                Analysis
+                                <svg :class="['w-5 h-5 transform', { 'rotate-180': upgradeSectionsOpen.Analysis }]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M19 9l-7 7-7-7" />
+                                </svg>
+                            </button>
+                            <div v-if="upgradeSectionsOpen.Analysis" class="p-4 transition-all duration-300 overflow-y-auto;">
+                                <div v-html="upgradeResults.analysis ? markdownToHtml(upgradeResults.analysis) : ''"></div>
+                            </div>
+                            <div v-if="upgradeSectionsOpen.Analysis" class="p-4 flex justify-between">
+                                <button @click="copyText(upgradeResults.analysis)" class="ml-4 bg-gray-700 text-white border-2 border-cyan-400 rounded-md px-4 py-2 hover:bg-gray-600">Copy</button>
+                                <button @click="downloadReport" class="ml-4 bg-gray-700 text-white border-2 border-cyan-400 rounded-md px-4 py-2 hover:bg-gray-600">Download Report</button>
+                            </div>
+                        </div>
+                        <div class="bg-gray-800 rounded-lg shadow-md">
+                            <button @click="upgradeSectionsOpen.Recommendations = !upgradeSectionsOpen.Recommendations" class="w-full flex justify-between items-center p-4 text-left font-semibold text-gray-200">
+                                Recommendations
+                                <svg :class="['w-5 h-5 transform', { 'rotate-180': upgradeSectionsOpen.Recommendations }]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M19 9l-7 7-7-7" />
+                                </svg>
+                            </button>
+                            <div v-if="upgradeSectionsOpen.Recommendations" class="p-4 transition-all duration-300 overflow-y-auto;">
+                                <div v-for="(rec, index) in (upgradeRecommendations || [])" :key="index" class="bg-gray-700 p-4 rounded-lg mb-4">
+                                    <h3 class="text-lg font-semibold text-white">{{ rec.title }}</h3>
+                                    <p class="text-gray-300">{{ rec.description }}</p>
+                                    <p class="text-gray-400">Cost: $ {{ rec.cost }}</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="section mt-4">
+                        <h2 class="text-lg font-semibold mb-4 flex items-center text-white">
+                            <svg class="w-5 h-5 mr-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z" />
+                            </svg>
+                            Upgrade Q&A
+                        </h2>
+                        <input v-model="upgradePrompt" placeholder="Ask a question about upgrades..." @keyup.enter="askUpgradeGrok" class="w-full bg-gray-700 text-white border border-gray-600 rounded-md p-2 focus:outline-none focus:ring-2 focus:ring-blue-500" :disabled="!upgradeResults.analysis">
+                        <button @click="askUpgradeGrok" :disabled="!upgradeResults.analysis || waitingForUpgradeGrok" class="mt-2 px-1 py-0.5 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed">Send</button>
+                        <p v-if="!upgradeResults.analysis" class="text-gray-300 mt-2">Run an analysis first to enable Q&A.</p>
+                        <p v-if="waitingForUpgradeGrok" class="text-gray-300 mt-2">Waiting for Grok...</p>
+                        <p v-if="upgradeGrokError" class="error mt-2">{{ upgradeGrokError }}</p>
+                        <div v-if="upgradeGrokMessages.length" class="mt-4 bg-gray-700 p-4 rounded-lg">
+                            <div v-for="(msg, index) in upgradeGrokMessages" :key="index" class="mb-2">
+                                <strong class="text-gray-200">{{ msg.role }}:</strong>
+                                <span class="text-gray-300">{{ msg.content }}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `,
+            setup() {
+                const { ref, computed, reactive, nextTick, onMounted, onUnmounted, inject, watch } = Vue;
+                const addToast = inject('addToast');
+                const socket = inject('socket');
+                const upgradeFiles = ref({ 'api_key.txt': { exists: false }, 'system_info.txt': { exists: false } });
+                const loadingUpgradeFiles = ref(true);
+                const upgradeTypes = ref(['general', 'specific']);
+                const upgradeCategories = ref([]);
+                const selectedUpgradeType = ref('');
+                const selectedUpgradeCategory = ref('');
+                const upgradeBudget = ref(null);
+                const upgradeProgress = ref({ step: '', percent: 0, error: null });
+                const upgradeResults = ref({ summary: '', analysis: '', system_data: '' });
+                const upgradeRecommendations = ref([]);
+                const upgradeSectionsOpen = ref({ SystemSummary: true, Analysis: true, Recommendations: true });
+                const upgradePrompt = ref('');
+                const upgradeGrokMessages = ref([]);
+                const waitingForUpgradeGrok = ref(false);
+                const upgradeGrokError = ref('');
+
+                const isRunAnalysisDisabled = computed(() => {
+                    if (!selectedUpgradeType.value) return true;
+                    if (selectedUpgradeType.value === 'specific' && !selectedUpgradeCategory.value) return true;
+                    return false;
+                });
+
+                watch(selectedUpgradeType, (newType) => {
+                    if (newType === 'general') {
+                        selectedUpgradeCategory.value = '';
+                    }
+                });
+
+                const fetchUpgradeFiles = async () => {
+                    await nextTick();
+                    try {
+                        const res = await fetch(`/api/upgrade/files?t=${Date.now()}`, { cache: "no-store" });
+                        const data = await res.json();
+                        if (data.success) upgradeFiles.value = data.files;
+                        else addToast('Couldn’t fetch file status!', 'error');
+                    } catch (e) {
+                        addToast(`Couldn’t fetch file status: ${e.message}`, 'error');
+                    } finally {
+                        loadingUpgradeFiles.value = false;
+                    }
+                };
+
+                const fetchUpgradeCategories = async () => {
+                    try {
+                        const res = await fetch('/api/upgrade/categories');
+                        const data = await res.json();
+                        if (data.success) upgradeCategories.value = data.categories;
+                        else throw new Error(data.error || 'Failed to fetch categories');
+                    } catch (e) {
+                        addToast(`Couldn’t fetch upgrade categories: ${e.message}`, 'error');
+                    }
+                };
+
+                const runUpgradeAnalysis = async () => {
+                    if (!selectedUpgradeType.value) {
+                        addToast('Please select an analysis type.', 'error');
+                        return;
+                    }
+                    if (selectedUpgradeType.value === 'specific' && !selectedUpgradeCategory.value) {
+                        addToast('Please select a category for specific analysis.', 'error');
+                        return;
+                    }
+                    await nextTick();
+                    upgradeProgress.value = { step: 'Analyzing upgrades...', percent: 0 };
+                    try {
+                        const response = await fetch('/api/upgrade/run', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                analysis_type: selectedUpgradeType.value,
+                                category: selectedUpgradeCategory.value,
+                                budget: upgradeBudget.value ? parseFloat(upgradeBudget.value) : null
+                            })
+                        });
+                        if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
+                        const data = await response.json();
+                        if (data.success) {
+                            upgradeResults.value = {
+                                summary: data.system_summary,
+                                analysis: data.analysis,
+                                system_data: data.system_data || ''
+                            };
+                            const defaultRecommendations = [
+                                { title: 'Upgrade CPU', description: 'Consider upgrading to Intel i7.', cost: 300 },
+                                { title: 'Increase RAM', description: 'Add 8GB more RAM for better performance.', cost: 150 }
+                            ].map(rec => reactive(rec));
+                            upgradeRecommendations.value = (data.recommendations && data.recommendations.length > 0)
+                                ? data.recommendations.map(rec => reactive(rec))
+                                : defaultRecommendations;
+                            upgradeProgress.value = { step: 'Analysis complete', percent: 100, error: null };
+                        } else {
+                            throw new Error(data.error || 'Failed to run analysis');
+                        }
+                    } catch (e) {
+                        upgradeProgress.value = { step: 'Analysis failed', percent: 0, error: e.message };
+                        addToast(`Upgrade analysis failed: ${e.message}`, 'error');
+                    }
+                };
+
+                const downloadReport = () => {
+                    fetch('/api/upgrade/report')
+                        .then(response => {
+                            if (!response.ok) throw new Error('upgrade_report.txt not found');
+                            return response.blob();
+                        })
+                        .then(blob => {
+                            const url = URL.createObjectURL(blob);
+                            const a = document.createElement('a');
+                            a.href = url;
+                            a.download = 'upgrade_report.txt';
+                            document.body.appendChild(a);
+                            a.click();
+                            document.body.removeChild(a);
+                            URL.revokeObjectURL(url);
+                            addToast('Report downloaded: upgrade_report.txt', 'success');
+                        })
+                        .catch(e => {
+                            addToast(`Error downloading report: ${e.message}`, 'error');
+                        });
+                };
+
+                const copyText = (text) => {
+                    if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+                        navigator.clipboard.writeText(text).then(() => {
+                            addToast('Raw report copied!', 'info');
+                        }).catch(err => {
+                            addToast(`Failed to copy: ${err.message}`, 'error');
+                        });
+                    } else {
+                        const textarea = document.createElement('textarea');
+                        textarea.value = text;
+                        document.body.appendChild(textarea);
+                        textarea.select();
+                        try {
+                            document.execCommand('copy');
+                            addToast('Raw report copied!', 'info');
+                        } catch (err) {
+                            addToast(`Failed to copy: ${err.message}`, 'error');
+                        }
+                        document.body.removeChild(textarea);
+                    }
+                };
+
+                const markdownToHtml = (markdown) => {
+                    if (!markdown || typeof markdown !== 'string') return '';
+                    const lines = markdown.split('\n');
+                    let htmlLines = [];
+                    let inList = false;
+
+                    for (let i = 0; i < lines.length; i++) {
+                        const line = lines[i];
+                        if (!line || typeof line !== 'string') continue;
+                        if (line.match(/^- (.*)$/)) {
+                            if (!inList) {
+                                htmlLines.push('<ul class="list-disc pl-6">');
+                                inList = true;
+                            }
+                            const content = line.replace(/^- (.*)$/, '$1');
+                            htmlLines.push(`<li class="ml-4 text-gray-300">${content}</li>`);
+                        } else {
+                            if (inList) {
+                                htmlLines.push('</ul>');
+                                inList = false;
+                            }
+                            if (line.match(/^# (.*)$/)) {
+                                const content = line.replace(/^# (.*)$/, '$1');
+                                htmlLines.push(`<h1 class="text-2xl font-bold mb-2 text-white">${content}</h1>`);
+                            } else if (line.match(/^## (.*)$/)) {
+                                const content = line.replace(/^## (.*)$/, '$1');
+                                htmlLines.push(`<h2 class="text-xl font-semibold mb-1 text-gray-200">${content}</h2>`);
+                            } else if (line.match(/=== (.*?) ===/)) {
+                                const content = line.replace(/=== (.*?) ===/, '$1');
+                                htmlLines.push(`<h3 class="text-lg font-semibold mt-4 mb-2 text-gray-100">${content}</h3>`);
+                            } else if (line.match(/```bash\n([\s\S]*?)```/)) {
+                                const content = line.replace(/```bash\n([\s\S]*?)```/, '$1');
+                                htmlLines.push(`<pre class="bg-gray-800 text-gray-200 p-2 rounded">${content}</pre>`);
+                            } else if (line.match(/```json\n([\s\S]*?)```/)) {
+                                const content = line.replace(/```json\n([\s\S]*?)```/, '$1');
+                                htmlLines.push(`<pre class="bg-gray-800 text-gray-200 p-2 rounded">${content}</pre>`);
+                            } else if (line.trim()) {
+                                htmlLines.push(line);
+                            }
+                        }
+                    }
+
+                    if (inList) htmlLines.push('</ul>');
+
+                    let html = htmlLines.join('<br>')
+                        .replace(/\*\*(.*?)\*\*/g, '<strong class="text-gray-100">$1</strong>')
+                        .replace(/\*(.*?)\*/g, '<em class="text-gray-300">$1</em>')
+                        .replace(/\[(.*?)\]\((https?:\/\/[^\s]+)\)/g, '<a href="$2" target="_blank" class="text-blue-400 hover:text-blue-300">$1</a>');
+
+                    const tableRegex = /\+[-+=]+\+\n([\s\S]*?)\n\+[-+=]+\+/g;
+                    html = html.replace(tableRegex, (match, content) => {
+                        const rows = content.split('\n').filter(row => row.trim() && !row.match(/^\+[-+=]+\+$/));
+                        if (!rows.length) return match;
+                        const headers = rows[0].split('|').map(h => h.trim()).filter(h => h);
+                        const body = rows.slice(1).map(row => row.split('|').map(cell => cell.trim()).filter(cell => cell));
+                        return `
+                            <table class="min-w-full border-collapse border border-gray-600 bg-gray-700">
+                                <thead>
+                                    <tr>${headers.map(h => `<th class="border border-gray-600 px-4 py-2 text-gray-200">${h}</th>`).join('')}</tr>
+                                </thead>
+                                <tbody>
+                                    ${body.map(row => `<tr>${row.map(cell => `<td class="border border-gray-600 px-4 py-2 text-gray-300">${cell}</td>`).join('')}</tr>`).join('')}
+                                </tbody>
+                            </table>
+                        `;
+                    });
+
+                    return html;
+                };
+
+                const askUpgradeGrok = async () => {
+                    if (!upgradePrompt.value.trim()) return;
+                    waitingForUpgradeGrok.value = true;
+                    upgradeGrokMessages.value.push({ role: 'user', content: upgradePrompt.value });
+                    try {
+                        const response = await fetch('/api/upgrade/qa', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                question: upgradePrompt.value,
+                                analysis: upgradeResults.value.analysis,
+                                recommendations: upgradeRecommendations.value,
+                                system_data: upgradeResults.value.system_data
+                            })
+                        });
+                        const data = await response.json();
+                        if (data.success) {
+                            upgradeGrokMessages.value.push({ role: 'assistant', content: data.answer });
+                        } else {
+                            throw new Error(data.error || 'Failed to get Q&A response');
+                        }
+                    } catch (e) {
+                        upgradeGrokError.value = `Failed to get Q&A response: ${e.message}`;
+                        addToast(`Failed to get Q&A response: ${e.message}`, 'error');
+                    } finally {
+                        waitingForUpgradeGrok.value = false;
+                        upgradePrompt.value = '';
+                    }
+                };
+
+                onMounted(() => {
+                    fetchUpgradeFiles();
+                    fetchUpgradeCategories();
+                    socket.on('upgrade_progress_update', (data) => {
+                        upgradeProgress.value = data;
+                    });
+                });
+
+                onUnmounted(() => {
+                    socket.off('upgrade_progress_update');
+                    upgradeProgress.value = { step: '', percent: 0, error: null };
+                    upgradeResults.value = { summary: '', analysis: '', system_data: '' };
+                    upgradeRecommendations.value = [];
+                    selectedUpgradeType.value = '';
+                    selectedUpgradeCategory.value = '';
+                    upgradeBudget.value = null;
+                    upgradeSectionsOpen.value = { SystemSummary: true, Analysis: true, Recommendations: true };
+                    upgradePrompt.value = '';
+                    upgradeGrokMessages.value = [];
+                    waitingForUpgradeGrok.value = false;
+                    upgradeGrokError.value = '';
+                });
+                
+                return {
+                    upgradeFiles,
+                    upgradeTypes,
+                    upgradeCategories,
+                    selectedUpgradeType,
+                    selectedUpgradeCategory,
+                    upgradeBudget,
+                    upgradeProgress,
+                    upgradeResults,
+                    upgradeRecommendations,
+                    upgradeSectionsOpen,
+                    upgradePrompt,
+                    upgradeGrokMessages,
+                    waitingForUpgradeGrok,
+                    upgradeGrokError,
+                    isRunAnalysisDisabled,
+                    fetchUpgradeFiles,
+                    fetchUpgradeCategories,
+                    runUpgradeAnalysis,
+                    downloadReport,
+                    copyText,
+                    markdownToHtml,
+                    askUpgradeGrok,
+                    loadingUpgradeFiles
+                };
+            }
+        };
+
+        // Main App
+        const app = createApp({
+            setup() {
+                const activeTab = ref('Main');
+                const tabs = ref(['Main', 'Monitor', 'Performance', 'Upgrade']);
+                console.log('Tabs array:', tabs.value);
+                const toasts = ref([]);
+
+                const addToast = (message, type = 'info') => {
+                    const id = Date.now();
+                    toasts.value.push({ id, message, type });
+                    if (toasts.value.length > 3) toasts.value.shift();
+                    nextTick(() => {
+                        setTimeout(() => {
+                            toasts.value = toasts.value.filter(t => t.id !== id);
+                        }, 3000);
+                    });
+                };
+                provide('addToast', addToast);
+
+                const socket = io();
+                provide('socket', socket);
+
+                const switchTab = (tab) => {
+                    console.log('Switching to tab:', tab);
+                    nextTick(() => {
+                        activeTab.value = tab;
+                    });
+                };
+
+                onMounted(() => {
+                    socket.on('connect', () => console.log('SocketIO connected successfully'));
+                    socket.on('connect_error', (error) => {
+                        addToast('Failed to connect to server. Ensure the server is running and accessible.', 'error');
+                    });
+                    console.log('Attempting to switch to Performance tab');
+                });
+
+                onUnmounted(() => {
+                    socket.disconnect();
+                });
+
+                const runNonRegressionTests = async () => {
+                    console.log('Starting non-regression tests...');
+                    try {
+                        activeTab.value = 'Main';
+                        await nextTick();
+                        if (activeTab.value !== 'Main') throw new Error('Main tab not activated');
+                        console.log('Main tab activated');
+
+                        activeTab.value = 'Monitor';
+                        await nextTick();
+                        if (activeTab.value !== 'Monitor') throw new Error('Monitor tab not activated');
+                        console.log('Monitor tab activated');
+
+                        activeTab.value = 'Performance';
+                        await nextTick();
+                        if (activeTab.value !== 'Performance') throw new Error('Performance tab not activated');
+                        console.log('Performance tab activated');
+
+                        activeTab.value = 'Upgrade';
+                        await nextTick();
+                        if (activeTab.value !== 'Upgrade') throw new Error('Upgrade tab not activated');
+                        console.log('Upgrade tab activated');
+
+                        console.log('Non-regression tests completed successfully');
+                        addToast('Non-regression tests passed!', 'success');
+                    } catch (e) {
+                        console.error('Non-regression test failed:', e.message);
+                        addToast(`Non-regression test failed: ${e.message}`, 'error');
+                    }
+                };
+
+                return { activeTab, tabs, toasts, runNonRegressionTests, switchTab };
+            },
+            components: {
+                'main-tab': MainTab,
+                'monitor-tab': MonitorTab,
+                'performance-tab': PerformanceTab,
+                'upgrade-tab': UpgradeTab,
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>

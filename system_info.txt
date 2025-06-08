@@ -1,0 +1,60 @@
+System metrics collection started at Sun May 18 19:50:14 2025
+
+=== SMBIOS / DMI ===
+No applicable metrics found.
+
+=== CPU Info ===
+No applicable metrics found.
+
+=== NIC Model Info ===
+No applicable metrics found.
+
+=== Memory Info ===
+No applicable metrics found.
+
+=== /proc Snapshots ===
+No applicable metrics found.
+
+=== NUMA Topology ===
+No applicable metrics found.
+
+=== PCIe Devices per NUMA Node ===
+No applicable metrics found.
+
+=== Installed Packages ===
+No applicable metrics found.
+
+=== Running Processes ===
+No applicable metrics found.
+
+=== Service Status ===
+No applicable metrics found.
+
+=== PCI Devices (Verbose) ===
+No applicable metrics found.
+
+=== USB Devices ===
+No applicable metrics found.
+
+=== Network Interface Configuration ===
+No applicable metrics found.
+
+=== NIC Firmware Info ===
+No applicable metrics found.
+
+=== Disk Info ===
+No applicable metrics found.
+
+=== GPU Info ===
+
+--- NVIDIA GPU Temperature ---
+0
+
+=== Custom Metrics ===
+No applicable metrics found.
+
+=== IPMI / BMC Data ===
+No applicable metrics found.
+
+=== Environmental Parameters ===
+No applicable metrics found.
