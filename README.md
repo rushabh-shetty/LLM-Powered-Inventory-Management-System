@@ -110,19 +110,15 @@ This system will enhance operational efficiency by:<br>
     <li>group_19_project
         <ul>
             <ul>
-                <li>Code_Final
-                    <ul>
-                        <li>collect_data.py</li>
-                        <li>index.html</li>
-                        <li>m_monitor_system_analyzer.py</li>
-                        <li>m_monitor_system.py</li>
-                        <li>performance_optimizer.py</li>
-                        <li>rag_implement_v3.py</li>
-                        <li>server.py</li>
-                        <li>upgrade_recommender.py</li>
-                        <li>upgrade_recommender.py</li>
-                    </ul>
-                </li>
+                <li>collect_data.py</li>
+                <li>index.html</li>
+                <li>m_monitor_system_analyzer.py</li>
+                <li>m_monitor_system.py</li>
+                <li>performance_optimizer.py</li>
+                <li>rag_implement_v3.py</li>
+                <li>server.py</li>
+                <li>upgrade_recommender.py</li>
+                <li>upgrade_recommender.py</li>
                 <li>imgs</li>
                 <li>Group_19_Final Report.pdf</li>
                 <li>README.md</li>
